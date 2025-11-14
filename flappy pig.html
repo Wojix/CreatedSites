@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flappy Pig 🐖💨</title>
+<style>
+body,html{margin:0;padding:0;height:100%;overflow:hidden;background:#9fe0ff;font-family:sans-serif;}
+canvas{display:block;width:100%;height:100%;}
+.hud{position:absolute;top:10px;left:10px;font-size:20px;color:#fff;font-weight:bold;text-shadow:1px 1px 2px #000;}
+button{position:absolute;top:10px;right:10px;padding:6px 12px;font-size:16px;border:none;border-radius:8px;background:#ff7aa2;color:#fff;cursor:pointer;}
+</style>
+</head>
+<body>
+<div class="hud">Score: <span id="score">0</span></div>
+<button id="restartBtn">Restart</button>
+<canvas id="game"></canvas>
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W=1280,H=720;
+canvas.width=W; canvas.height=H;
+
+// --- Game State ---
+let pig = {x: W*0.3, y:H/2, vy:0, r:44, angle:0};
+let clouds = [], carrots = [], particles=[];
+let groundX=0;
+let score=0;
+let gameOver=false;
+const gravity=1400;
+const flap=-420;
+const scrollSpeed=300;
+const groundHeight=100;
+const cloudCount=6;
+
+// --- Particle (おなら) ---
+function createParticle(){
+  for(let i=0;i<12;i++){
+    const p = {
+      x: pig.x - pig.r*0.8,
+      y: pig.y,
+      vx: -100-Math.random()*100,
+      vy: -20+Math.random()*40,
+      alpha: 1,
+      size: 20+Math.random()*20
+    };
+    particles.push(p);
+  }
+}
+
+// --- Init Clouds ---
+for(let i=0;i<cloudCount;i++){
+  clouds.push({x: Math.random()*W, y: Math.random()*H*0.5, size:40+Math.random()*30});
+}
+
+// --- Input ---
+function flapPig(){ 
+  if(gameOver){startGame(); return;} 
+  pig.vy=flap; 
+  createParticle();
+}
+window.addEventListener('keydown', e=>{if(e.code==='Space'){flapPig();}});
+canvas.addEventListener('mousedown', flapPig);
+canvas.addEventListener('touchstart', e=>{e.preventDefault(); flapPig();},{passive:false});
+
+// --- Restart ---
+function startGame(){
+  pig.y=H/2; pig.vy=0; pig.angle=0;
+  score=0; gameOver=false;
+  carrots=[]; groundX=0; particles=[];
+  for(let c of clouds){ c.x = Math.random()*W; c.y = Math.random()*H*0.5; c.size=40+Math.random()*30;}
+}
+document.getElementById('restartBtn').onclick=startGame;
+
+// --- Spawn Carrots ---
+let lastSpawn=0;
+function spawnCarrot(){
+  const gap=160+Math.random()*60;
+  const top=80+Math.random()*(H-groundHeight-gap-160);
+  const bottomY=top+gap;
+  carrots.push({x:W+50, topH:top, bottomY:bottomY, passed:false});
+}
+
+// --- Collision (見た目に合わせる) ---
+function checkCollision(){
+  const px=pig.x, py=pig.y;
+  const prx=44*0.8, pry=44*0.8; // 矩形判定を少し緩める
+
+  // 地面・天井
+  if(py+pry>=H-groundHeight||py-pry<=0) return true;
+
+  // 人参
+  for(const c of carrots){
+    if(px+prx>c.x-22 && px-prx<c.x+22){
+      if(py-pry<c.topH || py+pry>c.bottomY) return true;
+    }
+  }
+  return false;
+}
+
+// --- Loop ---
+let lastTime=performance.now();
+function loop(now){
+  const dt=Math.min((now-lastTime)/1000,0.032);
+  lastTime=now;
+
+  if(!gameOver){
+    // physics
+    pig.vy+=gravity*dt;
+    pig.y+=pig.vy*dt;
+    pig.angle = Math.min(Math.max(-Math.PI/4, pig.vy/400), Math.PI/2);
+
+    // spawn
+    if(now-lastSpawn>1500){
+      lastSpawn=now;
+      spawnCarrot();
+    }
+
+    // update carrots
+    for(const c of carrots) c.x-=scrollSpeed*dt;
+    while(carrots.length && carrots[0].x<-50) carrots.shift();
+    for(const c of carrots){
+      if(!c.passed && c.x<pig.x){
+        c.passed=true; score++; document.getElementById('score').textContent=score;
+      }
+    }
+
+    // ground scroll
+    groundX-=scrollSpeed*dt;
+    if(groundX<-W) groundX=0;
+
+    // update clouds
+    for(const cl of clouds){
+      cl.x-=scrollSpeed*0.2*dt;
+      if(cl.x<-cl.size) cl.x=W;
+    }
+
+    // update particles
+    for(let i=particles.length-1;i>=0;i--){
+      const p=particles[i];
+      p.x+=p.vx*dt;
+      p.y+=p.vy*dt;
+      p.alpha-=dt*1.5;
+      p.size*=0.98;
+      if(p.alpha<=0) particles.splice(i,1);
+    }
+
+    // collision
+    if(checkCollision()) gameOver=true;
+  }
+
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// --- Draw ---
+function draw(){
+  ctx.clearRect(0,0,W,H);
+
+  // sky
+  ctx.fillStyle='#9fe0ff';
+  ctx.fillRect(0,0,W,H);
+
+  // clouds
+  ctx.font='40px serif';
+  for(const cl of clouds) ctx.fillText('☁️', cl.x, cl.y);
+
+  // carrots
+  for(const c of carrots){
+    let y=22;
+    while(y<c.topH-22){ctx.fillText('🥕',c.x,y);y+=44;}
+    y=c.bottomY+22;
+    while(y<H-groundHeight-22){ctx.fillText('🥕',c.x,y);y+=44;}
+  }
+
+  // ground
+  ctx.fillStyle='#6ec27d';
+  for(let i=-1;i<2;i++){
+    ctx.fillRect(groundX + i*W,H-groundHeight,W,groundHeight);
+  }
+
+  // particles
+  for(const p of particles){
+    ctx.globalAlpha=p.alpha;
+    ctx.font=`${p.size}px serif`;
+    ctx.fillText('💨', p.x, p.y);
+  }
+  ctx.globalAlpha=1;
+
+  // pig
+  ctx.save();
+  ctx.translate(pig.x,pig.y);
+  ctx.rotate(pig.angle+Math.PI);
+  ctx.font=`${pig.r*2}px serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🐖',0,0);
+  ctx.restore();
+}
+startGame();
+</script>
+</body>
+</html>

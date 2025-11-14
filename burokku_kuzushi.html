@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>CYBER BLOCK BREAKER 2077 - Boss追加版</title>
+<style>
+  body {
+    margin: 0;
+    background: black;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+    font-family: "Orbitron", monospace;
+    color: cyan;
+  }
+  canvas { display: none; background: black; }
+  #titleScreen { text-align: center; animation: fadeIn 1.2s ease-in-out; }
+  #titleScreen h1 {
+    font-size: 48px; color: #00ffff;
+    text-shadow: 0 0 15px #0ff, 0 0 30px #00ffff;
+    animation: glowPulse 2s infinite alternate;
+  }
+  #startButton {
+    background: linear-gradient(90deg,#00ffff,#0088ff);
+    border: none; color: black; font-size: 20px;
+    padding: 12px 40px; border-radius: 12px; cursor: pointer;
+    margin-top: 24px; box-shadow: 0 0 20px #00ffff; transition: .18s;
+  }
+  #startButton:hover { transform: scale(1.05); box-shadow: 0 0 30px #00ffff; }
+  #stageMessage {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    color: #00ffff; font-size: 36px; font-family: "Orbitron", monospace;
+    text-shadow: 0 0 20px #00ffff; display: none;
+  }
+  @keyframes glowPulse { from { text-shadow: 0 0 10px #0ff; } to { text-shadow: 0 0 30px #00ffff; } }
+  @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
+</style>
+</head>
+<body>
+
+<div id="titleScreen">
+  <h1>CYBER BLOCK BREAKER<br>2077</h1>
+  <button id="startButton">▶ START</button>
+</div>
+
+<div id="stageMessage"></div>
+<canvas id="gameCanvas" width="450"></canvas>
+
+<script>
+// =================== 基本設定 ===================
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+canvas.height = window.innerHeight;
+const stageMessage = document.getElementById("stageMessage");
+
+// 効果音（外部URL使用）
+const sounds = {
+  hit: new Audio("https://assets.mixkit.co/active_storage/sfx/2019/03/22/sfx_wood_plank_hit_1.mp3"),
+  block: new Audio("https://assets.mixkit.co/active_storage/sfx/2019/03/22/sfx_click_3.mp3"),
+  item: new Audio("https://assets.mixkit.co/active_storage/sfx/2019/03/22/sfx_success_1.mp3"),
+  gameover: new Audio("https://assets.mixkit.co/active_storage/sfx/2019/03/22/sfx_negative_1.mp3"),
+  clear: new Audio("https://assets.mixkit.co/active_storage/sfx/2019/03/22/sfx_game_level_complete.mp3"),
+  bossHit: new Audio("https://assets.mixkit.co/active_storage/sfx/2018/02/sfx_laser_soft_hit_1.mp3"),
+  explosion: new Audio("https://assets.mixkit.co/active_storage/sfx/2019/03/22/sfx_explosion_03.mp3")
+};
+
+// =================== 背景エフェクト ===================
+const lines = [];
+for(let i=0;i<40;i++){
+  lines.push({
+    x: Math.random()*canvas.width,
+    y: Math.random()*canvas.height,
+    len: Math.random()*20+10,
+    speed: Math.random()*2+1,
+    color: `rgba(0,255,255,${Math.random()*0.5+0.25})`
+  });
+}
+let gridOffset = 0;
+
+// =================== ゲーム基本要素 ===================
+let paddle, balls, bricks, items, keys, score, stage;
+const brickRowCount = 6, brickColumnCount = 6;
+const brickWidth = 55, brickHeight = 20, brickPadding = 10;
+const brickOffsetTop = 50, brickOffsetLeft = 20;
+const itemTypes = [
+  {type:"expand", color:"#FFFF00"},
+  {type:"bigBall", color:"#00AAFF"},
+  {type:"minus", color:"#FF0000"},
+  {type:"multiply", color:"#AA00FF"}
+];
+let gameRunning = false;
+
+// ======= ボス =======
+let boss = null; // boss object when exists
+// boss = { col, row, cols:3, rows:3, hits:10, maxHits:10, color, active:true, cooldown:0 }
+
+// =================== 初期化・ステージ構築 ===================
+function initGame(){
+  paddle = { width:80, height:15, x:canvas.width/2-40, y:canvas.height-30, speed:7, expanded:false, expandTimer:0 };
+  balls = [{ x:canvas.width/2, y:canvas.height-45, dx:4, dy:-4, radius:10, trail:[] }];
+  items = [];
+  keys = {};
+  score = 0;
+  stage = 1;
+  buildStage(stage);
+}
+
+function buildStage(num){
+  // bricks リセット
+  bricks = [];
+  for(let c=0;c<brickColumnCount;c++){
+    bricks[c]=[];
+    for(let r=0;r<brickRowCount;r++){
+      let type="normal";
+      if(num===1){
+        type = Math.random()<0.8 ? "normal" : "hard3";
+      } else if(num===2){
+        const p=Math.random();
+        type = p<0.6 ? "hard3" : p<0.9 ? "hard5" : "unbreakable";
+      } else { // num>=3
+        const p=Math.random();
+        type = p<0.3 ? "hard5" : "unbreakable";
+      }
+      const hits = (type==="normal")?1: (type==="hard3")?3: (type==="hard5")?5: Infinity;
+      const color = type==="normal" ? ["#FF00FF","#00FFFF","#FFAA00","#00FFAA"][r%4]
+                   : type==="hard3" ? "#FF3333"
+                   : type==="hard5" ? "#3399FF"
+                   : "#666666";
+      bricks[c][r] = { x:0, y:0, status:1, type:type, hits:hits, color:color };
+    }
+  }
+
+  // ↓ ボスの10%出現判定（ステージ開始時ランダム）
+  boss = null;
+  if(Math.random() < 0.10){
+    // bossの置ける範囲：col 0..(cols-3), row 0..(rows-3) ただし上〜中段に限定(0..2)
+    const maxCol = Math.max(0, brickColumnCount - 3);
+    const maxRow = Math.max(0, Math.min(2, brickRowCount - 3));
+    const col = Math.floor(Math.random() * (maxCol + 1));
+    const row = Math.floor(Math.random() * (maxRow + 1));
+    boss = {
+      col: col,
+      row: row,
+      cols: 3,
+      rows: 3,
+      hits: 10,
+      maxHits: 10,
+      color: `hsl(${Math.floor(Math.random()*360)}, 80%, 55%)`,
+      active: true,
+      cooldown: 0, // ヒット連打防止フレーム
+      flash: 0 // 点滅演出カウンタ
+    };
+    // （下の bricks はそのまま残す — bossは上に乗る見たて）
+  }
+
+  // 表示用メッセージと少しの遅延でゲーム開始
+  showStageMessage(`STAGE ${num}`);
+  setTimeout(()=>{ gameRunning = true; draw(); }, 1200);
+}
+
+// =================== 入力 ===================
+document.addEventListener("keydown",(e)=>{ keys[e.key] = true; updatePaddleImmediate(); });
+document.addEventListener("keyup",(e)=>{ keys[e.key] = false; });
+
+function updatePaddleImmediate(){
+  if(!paddle) return;
+  if(keys["ArrowRight"]) paddle.x += paddle.speed;
+  if(keys["ArrowLeft"]) paddle.x -= paddle.speed;
+  if(paddle.x < 0) paddle.x = 0;
+  if(paddle.x + paddle.width > canvas.width) paddle.x = canvas.width - paddle.width;
+}
+
+// =================== 描画関数 ===================
+function drawLines(){
+  lines.forEach(l=>{
+    ctx.strokeStyle = l.color;
+    ctx.beginPath();
+    ctx.moveTo(l.x, l.y);
+    ctx.lineTo(l.x, l.y + l.len);
+    ctx.stroke();
+    l.y += l.speed;
+    if(l.y > canvas.height) l.y = -l.len;
+  });
+  // グリッド床
+  ctx.strokeStyle = "rgba(0,255,200,0.12)";
+  for(let x=-canvas.width; x<canvas.width*2; x+=40){
+    ctx.beginPath();
+    ctx.moveTo(x + gridOffset, canvas.height);
+    ctx.lineTo(x, canvas.height - 300);
+    ctx.stroke();
+  }
+  for(let y=canvas.height-300; y<canvas.height; y+=20){
+    ctx.beginPath();
+    ctx.moveTo(0, y + ((gridOffset/4)%20));
+    ctx.lineTo(canvas.width, y + ((gridOffset/4)%20));
+    ctx.stroke();
+  }
+}
+
+function drawBricks(){
+  for(let c=0;c<brickColumnCount;c++){
+    for(let r=0;r<brickRowCount;r++){
+      const b = bricks[c][r];
+      if(b.status === 1){
+        const bx = c*(brickWidth+brickPadding) + brickOffsetLeft;
+        const by = r*(brickHeight+brickPadding) + brickOffsetTop;
+        b.x = bx; b.y = by;
+        ctx.fillStyle = b.color;
+        ctx.shadowColor = b.color;
+        ctx.shadowBlur = 10;
+        ctx.fillRect(bx, by, brickWidth, brickHeight);
+        // 耐久値を表示（壊せるブロックのみ）
+        if(b.type !== "unbreakable" && b.hits > 1){
+          ctx.fillStyle = "#fff";
+          ctx.font = "12px monospace";
+          ctx.fillText(b.hits, bx + brickWidth/2 - 6, by + brickHeight/1.5);
+        }
+      }
+    }
+  }
+  ctx.shadowBlur = 0;
+}
+
+function drawBoss(){
+  if(!boss || !boss.active) return;
+  // bossの矩形（pixel）
+  const bx = boss.col * (brickWidth + brickPadding) + brickOffsetLeft;
+  const by = boss.row * (brickHeight + brickPadding) + brickOffsetTop;
+  const bW = boss.cols * brickWidth + (boss.cols - 1) * brickPadding;
+  const bH = boss.rows * brickHeight + (boss.rows - 1) * brickPadding;
+
+  // 点滅表現
+  if(boss.flash > 0){
+    boss.flash--;
+    ctx.globalAlpha = 0.35 + 0.65 * (boss.flash % 6 / 6);
+  } else ctx.globalAlpha = 1.0;
+
+  // 外枠グロー
+  ctx.fillStyle = boss.color;
+  ctx.shadowColor = boss.color;
+  ctx.shadowBlur = 20;
+  ctx.fillRect(bx - 4, by - 4, bW + 8, bH + 8);
+
+  // 本体（細かいラインを入れてサイバー感）
+  ctx.fillStyle = boss.color;
+  ctx.shadowBlur = 10;
+  ctx.fillRect(bx, by, bW, bH);
+
+  // HP表示
+  ctx.globalAlpha = 1.0;
+  ctx.fillStyle = "#000";
+  ctx.font = "14px monospace";
+  ctx.fillText(`BOSS ${boss.hits}/${boss.maxHits}`, bx + 8, by + 18);
+
+  // 戻す
+  ctx.shadowBlur = 0;
+}
+
+function drawPaddle(){
+  ctx.fillStyle = paddle.expanded ? "#00FFFF" : "#FF00FF";
+  ctx.shadowColor = "#0FF"; ctx.shadowBlur = 15;
+  ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height);
+  ctx.shadowBlur = 0;
+}
+
+function drawBalls(){
+  balls.forEach(ball=>{
+    for(let i=0;i<ball.trail.length;i++){
+      const alpha = i/ball.trail.length;
+      ctx.beginPath();
+      ctx.arc(ball.trail[i].x, ball.trail[i].y, ball.radius*(alpha*0.5+0.5), 0, Math.PI*2);
+      ctx.fillStyle = `rgba(0,255,200,${alpha*0.35})`;
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+    ctx.fillStyle = "#00FFAA";
+    ctx.shadowColor = "#0FF";
+    ctx.shadowBlur = 15;
+    ctx.fill();
+    ctx.closePath();
+    ctx.shadowBlur = 0;
+  });
+}
+
+function drawItems(){
+  items.forEach(it=>{
+    if(it.active){
+      ctx.beginPath();
+      ctx.arc(it.x, it.y, 8, 0, Math.PI*2);
+      ctx.fillStyle = it.color;
+      ctx.shadowColor = it.color; ctx.shadowBlur = 10;
+      ctx.fill(); ctx.closePath(); ctx.shadowBlur = 0;
+      it.y += 3;
+      // 取得
+      if(it.y > paddle.y && it.x > paddle.x && it.x < paddle.x + paddle.width){
+        activateItem(it.type);
+        try{ sounds.item.currentTime = 0; sounds.item.play(); }catch(e){}
+        it.active = false;
+      } else if(it.y > canvas.height){ it.active = false; }
+    }
+  });
+}
+
+function drawScore(){
+  ctx.font = "18px monospace";
+  ctx.fillStyle = "#0FF";
+  ctx.shadowColor = "#0FF";
+  ctx.shadowBlur = 10;
+  ctx.fillText(`STAGE ${stage} / SCORE: ${score}`, 10, 25);
+  ctx.shadowBlur = 0;
+}
+
+// =================== エフェクト：爆発（簡易アニメ） ===================
+let explosions = []; // {x,y,r,maxR,life,color}
+function spawnExplosion(x,y,color){
+  explosions.push({ x, y, r:6, maxR: Math.max(canvas.width,canvas.height)*0.4, life: 30, color });
+  try{ sounds.explosion.currentTime = 0; sounds.explosion.play(); }catch(e){}
+}
+function drawExplosions(){
+  for(let i = explosions.length-1; i>=0; i--){
+    const ex = explosions[i];
+    const progress = 1 - ex.life/30;
+    ctx.beginPath();
+    ctx.arc(ex.x, ex.y, ex.r + ex.r * progress * 5, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,255,255,${0.12 * (1-progress)})`;
+    ctx.fill();
+    // 光の輪
+    ctx.beginPath();
+    ctx.arc(ex.x, ex.y, ex.r + ex.r * progress * 3, 0, Math.PI*2);
+    ctx.strokeStyle = ex.color;
+    ctx.globalAlpha = 0.18 * (1-progress);
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
+    ex.life--;
+    if(ex.life <= 0) explosions.splice(i,1);
+  }
+}
+
+// =================== ロジック：アイテム等 ===================
+function activateItem(type){
+  switch(type){
+    case "expand":
+      paddle.expanded = true; paddle.width = 120; paddle.expandTimer = 300;
+      break;
+    case "bigBall":
+      balls.forEach(b => b.radius += 3);
+      break;
+    case "minus":
+      balls.forEach(b => { b.dx *= 1.3; b.dy *= 1.3; });
+      break;
+    case "multiply":
+      const newBalls = [];
+      balls.forEach(b => newBalls.push({...b, dx: -b.dx}));
+      balls = balls.concat(newBalls);
+      break;
+  }
+}
+
+// =================== 衝突判定（ボス優先） ===================
+function collisionDetection(){
+  // 1) boss に当たっているかチェック（bossが存在かつactive）
+  if(boss && boss.active){
+    // ボスのピクセル矩形
+    const bx = boss.col * (brickWidth + brickPadding) + brickOffsetLeft;
+    const by = boss.row * (brickHeight + brickPadding) + brickOffsetTop;
+    const bW = boss.cols * brickWidth + (boss.cols - 1) * brickPadding;
+    const bH = boss.rows * brickHeight + (boss.rows - 1) * brickPadding;
+
+    balls.forEach(ball => {
+      if(boss.cooldown > 0) boss.cooldown--;
+      const collided = (ball.x > bx - ball.radius && ball.x < bx + bW + ball.radius &&
+                        ball.y > by - ball.radius && ball.y < by + bH + ball.radius);
+      if(collided && boss.cooldown === 0){
+        boss.hits--;
+        boss.cooldown = 8; // 少しの無敵フレームで多重ヒット防止
+        boss.flash = 8; // 描画点滅
+        // 反射させる
+        ball.dy = -ball.dy;
+        try{ sounds.bossHit.currentTime = 0; sounds.bossHit.play(); }catch(e){}
+        // ボス破壊処理
+        if(boss.hits <= 0){
+          boss.active = false;
+          // 爆発演出（中心ピクセル）
+          const cx = bx + bW/2;
+          const cy = by + bH/2;
+          spawnExplosion(cx, cy, boss.color);
+          // 周囲のブロック（bossの3x3とその周囲8方向 = boss.col-1 .. boss.col+3-?）を巻き込む
+          const fromC = Math.max(0, boss.col - 1);
+          const toC = Math.min(brickColumnCount - 1, boss.col + boss.cols);
+          const fromR = Math.max(0, boss.row - 1);
+          const toR = Math.min(brickRowCount - 1, boss.row + boss.rows);
+          for(let c = fromC; c <= toC; c++){
+            for(let r = fromR; r <= toR; r++){
+              const b = bricks[c][r];
+              if(b && b.status === 1 && b.type !== "unbreakable"){
+                b.status = 0;
+                score++;
+                // 破壊でアイテムを落とす確率（小）
+                if(Math.random() < 0.25){
+                  const rand = itemTypes[Math.floor(Math.random()*itemTypes.length)];
+                  items.push({ x: b.x + brickWidth/2, y: b.y + brickHeight/2, color: rand.color, type: rand.type, active: true });
+                }
+              } else if(b && b && b.status === 1 && b.type === "unbreakable"){
+                // unbreakable は壊れないのでスキップ
+              }
+            }
+          }
+          // 画面フラッシュ（瞬間）
+          flashScreen();
+        }
+      }
+    });
+  }
+
+  // 2) 通常ブロックとの当たり判定（boss と同時に起きる場合もある）
+  for(let c=0;c<brickColumnCount;c++){
+    for(let r=0;r<brickRowCount;r++){
+      const b = bricks[c][r];
+      if(b.status === 1){
+        balls.forEach(ball => {
+          // ただし boss がそのセル上にアクティブであれば、ブロックには当たらない（bossが優先）
+          if(boss && boss.active){
+            if(c >= boss.col && c < boss.col + boss.cols && r >= boss.row && r < boss.row + boss.rows){
+              return; // boss上のセルは無視
+            }
+          }
+          const bx = b.x; const by = b.y;
+          if(ball.x > bx - ball.radius && ball.x < bx + brickWidth + ball.radius &&
+             ball.y > by - ball.radius && ball.y < by + brickHeight + ball.radius){
+            // 反射
+            ball.dy = -ball.dy;
+            // 耐久値減少（壊れないブロックは無視）
+            if(b.type !== "unbreakable"){
+              b.hits--;
+              if(b.hits <= 0){
+                b.status = 0;
+                score++;
+                try{ sounds.block.currentTime = 0; sounds.block.play(); }catch(e){}
+                // アイテム生成
+                if(Math.random() < 0.25){
+                  const rand = itemTypes[Math.floor(Math.random()*itemTypes.length)];
+                  items.push({ x: bx + brickWidth/2, y: by + brickHeight/2, color: rand.color, type: rand.type, active: true });
+                }
+              } else {
+                // 被弾音（弱）
+                try{ sounds.hit.currentTime = 0; sounds.hit.play(); }catch(e){}
+              }
+            } else {
+              // 壊れないブロックに当たったら音だけ
+              try{ sounds.hit.currentTime = 0; sounds.hit.play(); }catch(e){}
+            }
+          }
+        });
+      }
+    }
+  }
+}
+
+// スクリーンフラッシュ
+let flashTimer = 0;
+function flashScreen(){
+  flashTimer = 8;
+}
+
+// =================== ボール移動 ===================
+function moveBalls(){
+  for(let i = balls.length - 1; i >= 0; i--){
+    const ball = balls[i];
+    ball.x += ball.dx;
+    ball.y += ball.dy;
+    ball.trail.push({ x: ball.x, y: ball.y });
+    if(ball.trail.length > 15) ball.trail.shift();
+
+    if(ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) ball.dx = -ball.dx;
+    if(ball.y - ball.radius < 0) ball.dy = -ball.dy;
+
+    if(ball.y + ball.radius > canvas.height){
+      balls.splice(i,1);
+      if(balls.length === 0){
+        try{ sounds.gameover.currentTime = 0; sounds.gameover.play(); }catch(e){}
+        endGame("GAME OVER");
+        return;
+      }
+    }
+
+    // パドルとの当たり
+    if(ball.y + ball.radius > paddle.y &&
+       ball.x > paddle.x && ball.x < paddle.x + paddle.width){
+      ball.dy = -Math.abs(ball.dy);
+      try{ sounds.hit.currentTime = 0; sounds.hit.play(); }catch(e){}
+    }
+  }
+}
+
+// =================== 移動・描画ループ ===================
+function draw(){
+  if(!gameRunning) return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // 背景・グリッドオフセット
+  gridOffset += 2;
+
+  // 背景ライン
+  drawLines();
+
+  // 爆発エフェクト
+  drawExplosions();
+
+  // 爆発フラッシュ
+  if(flashTimer > 0){
+    flashTimer--;
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+
+  // ブロック描画
+  drawBricks();
+
+  // ボス（上に描画）
+  drawBoss();
+
+  // ボール
+  drawBalls();
+
+  // パドル
+  drawPaddle();
+
+  // アイテム
+  drawItems();
+
+  // スコア
+  drawScore();
+
+  // 衝突判定（boss優先）
+  collisionDetection();
+
+  // 移動更新
+  moveBalls();
+  movePaddle();
+
+  requestAnimationFrame(draw);
+}
+
+// =================== アイテムの動作 ===================
+function movePaddle(){
+  if(!paddle) return;
+  if(keys["ArrowRight"]) paddle.x += paddle.speed;
+  if(keys["ArrowLeft"]) paddle.x -= paddle.speed;
+  if(paddle.x < 0) paddle.x = 0;
+  if(paddle.x + paddle.width > canvas.width) paddle.x = canvas.width - paddle.width;
+  if(paddle.expanded){
+    paddle.expandTimer--;
+    if(paddle.expandTimer <= 0){ paddle.expanded = false; paddle.width = 80; }
+  }
+}
+
+// =================== ステージ遷移 ===================
+function nextStage(){
+  gameRunning = false;
+  try{ sounds.clear.currentTime = 0; sounds.clear.play(); }catch(e){}
+  if(stage >= 3){
+    endGame("CONGRATULATIONS!!");
+    return;
+  }
+  stage++;
+  showStageMessage("STAGE CLEAR");
+  setTimeout(()=>{ buildStage(stage); }, 1400);
+}
+
+function showStageMessage(msg){
+  stageMessage.textContent = msg;
+  stageMessage.style.display = "block";
+  setTimeout(()=>{ stageMessage.style.display = "none"; }, 1500);
+}
+
+// =================== 終了処理（タイトル戻し） ===================
+function endGame(msg){
+  gameRunning = false;
+  setTimeout(()=>{ alert(msg); canvas.style.display = "none"; document.getElementById("titleScreen").style.display = "block"; }, 300);
+}
+
+// =================== 爆発エフェクト描画ループ ===================
+function drawExplosions(){
+  for(let i = explosions.length - 1; i >= 0; i--){
+    const ex = explosions[i];
+    const progress = 1 - ex.life / 30;
+    ctx.beginPath();
+    ctx.arc(ex.x, ex.y, ex.r + ex.r * progress * 6, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,255,255,${0.06 * (1-progress)})`;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(ex.x, ex.y, ex.r + ex.r * progress * 3, 0, Math.PI*2);
+    ctx.strokeStyle = ex.color;
+    ctx.globalAlpha = 0.16 * (1-progress);
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
+    ex.life--;
+    if(ex.life <= 0) explosions.splice(i, 1);
+  }
+}
+
+// =================== ユーティリティ：ブロックが全部壊れたか判定（unbreakableを除く） ========
+function remainingBreakableBlocks(){
+  let cnt = 0;
+  for(let c=0;c<brickColumnCount;c++){
+    for(let r=0;r<brickRowCount;r++){
+      const b = bricks[c][r];
+      if(b.status === 1 && b.type !== "unbreakable") cnt++;
+    }
+  }
+  return cnt;
+}
+
+// 常に呼ぶタイミングで残数チェック（collisionなどで score 変化後に呼ぶ）
+function checkStageClear(){
+  const remain = remainingBreakableBlocks();
+  if(remain === 0){
+    nextStage();
+  }
+}
+
+// =================== ゲーム開始・制御 ===================
+function startGame(){
+  document.getElementById("titleScreen").style.display = "none";
+  canvas.style.display = "block";
+  initGame();
+  try{ sounds.clear.currentTime = 0; }catch(e){}
+}
+
+document.getElementById("startButton").addEventListener("click", startGame);
+
+// ウィンドウリサイズ対応
+window.addEventListener("resize", ()=>{
+  canvas.height = window.innerHeight;
+  if(paddle) paddle.y = canvas.height - 30;
+});
+
+// =================== buildStage の最後に残りチェックをトリガーするため collision の後で呼ぶ =======
+// collisionDetection のブロック破壊部分で score++ と b.status=0 をしている。
+// そこで stage clear を判定するため draw の最後に checkStageClear() を挿入。
+(function attachStageCheck(){
+  const oldDraw = draw;
+  draw = function(){
+    if(!gameRunning) return;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    gridOffset += 2;
+    drawLines();
+    drawExplosions();
+    if(flashTimer > 0){ flashTimer--; ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(0,0,canvas.width,canvas.height); }
+    drawBricks();
+    drawBoss();
+    drawBalls();
+    drawPaddle();
+    drawItems();
+    drawScore();
+    collisionDetection();
+    moveBalls();
+    movePaddle();
+    checkStageClear();
+    requestAnimationFrame(draw);
+  };
+})();
+
+</script>
+</body>
+</html>

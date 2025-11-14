@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Cookie Clicker</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4efe9; --card:#ffffff; --accent:#d97a3b; --muted:#8b6a56; --glass: rgba(255,255,255,0.6);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;padding:20px; font-family:"Noto Sans JP",system-ui,-apple-system,"Hiragino Kaku Gothic ProN","メイリオ",Meiryo,sans-serif;
+  background:linear-gradient(180deg,var(--bg) 0%, #f8f2ea 100%); color:#34271f;
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+}
+.wrap{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:380px 1fr;gap:20px;align-items:start;}
+.card{background:var(--card);border-radius:14px;padding:18px;box-shadow:0 8px 28px rgba(30,20,15,0.06);display:flex;flex-direction:column;align-items:center;}
+#gameTitle{font-size:18px;font-weight:800;color:var(--muted);margin-bottom:8px}
+#cookie{font-size:120px;line-height:1;cursor:pointer;user-select:none;transition:transform .12s cubic-bezier(.2,.9,.3,1);will-change:transform}
+#cookie.bounce{animation:bounce .22s ease}
+@keyframes bounce{0%{transform:translateY(0)}30%{transform:translateY(-18px)}50%{transform:translateY(0)}70%{transform:translateY(-8px)}100%{transform:translateY(0)}}
+.stat{text-align:center;margin-top:8px}
+#count{font-size:28px;font-weight:800;color:#2e1f17}
+#countKanji{font-size:14px;color:#8a6b56;margin-top:6px}
+#cps{font-size:13px;color:#7a5d4a;margin-top:6px}
+.controls{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;justify-content:center}
+.toggle{background:#eee;color:#333;padding:8px 10px;border-radius:10px;border:none;cursor:pointer;font-weight:700}
+.prestige-btn{background:linear-gradient(90deg,#f6d365,#fda085);border:none;padding:8px 12px;border-radius:10px;font-weight:800;cursor:pointer;box-shadow:0 6px 18px rgba(250,200,120,0.12)}
+.prestige-btn[disabled]{opacity:.4;cursor:not-allowed;filter:grayscale(.2)}
+.right-col{display:flex;flex-direction:column;gap:16px}
+.panel{background:linear-gradient(180deg,rgba(255,255,255,0.95),var(--glass));border-radius:12px;padding:14px;box-shadow:0 6px 18px rgba(30,20,15,0.06)}
+.panel h3{margin:0 0 10px 0;font-size:15px;color:var(--muted)}
+.shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.shop-item{background:#fff;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;border:1px solid rgba(0,0,0,0.04)}
+.item-title{font-weight:800;font-size:14px}
+.item-meta{font-size:12px;color:#7a5d4a}
+.buy-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.btn{background:var(--accent);color:#fff;border:none;padding:6px 8px;border-radius:8px;font-weight:800;cursor:pointer;font-size:13px}
+.btn.small{padding:4px 7px;font-size:12px;border-radius:8px}
+.btn:disabled{opacity:.45;cursor:not-allowed;filter:grayscale(.25)}
+.ach-list{font-size:13px;color:#513a2d;display:flex;flex-direction:column;gap:6px}
+.ach-item{background:linear-gradient(90deg,#fffaf0,#fff6ec);padding:8px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.03)}
+.theme-menu{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,255,255,0.96);padding:18px;border-radius:14px;display:none;box-shadow:0 12px 36px rgba(0,0,0,0.22);z-index:3000}
+.theme-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+.theme-swatch{padding:8px 12px;border-radius:8px;cursor:pointer;border:none;font-weight:700;color:#fff}
+.small-note{font-size:12px;color:#6d5a4c;margin-top:6px;text-align:center}
+.prestige-overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.0);z-index:4000;pointer-events:none}
+.prestige-center{position:relative;width:80%;max-width:800px;text-align:center;pointer-events:none}
+.prestige-text{font-size:28px;font-weight:900;color:#fff;text-shadow:0 8px 24px rgba(0,0,0,0.4)}
+.particle{position:absolute;width:12px;height:12px;border-radius:50%;background:gold;box-shadow:0 0 8px rgba(255,215,0,0.9);opacity:0.95}
+.footer-row{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px;flex-wrap:wrap}
+@media(max-width:980px){.wrap{grid-template-columns:1fr;padding:12px}.shop-grid{grid-template-columns:1fr}.theme-menu{width:92%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div id="gameTitle">Cookie Clicker</div>
+    <div id="cookie" title="クリックで増やす">🍪</div>
+    <div class="stat">
+      <div id="count">0</div>
+      <div id="countKanji">0</div>
+      <div id="cps">CPS: 0</div>
+      <div id="prestigeInfo" style="margin-top:6px;font-size:13px;color:#6a563f"></div>
+    </div>
+
+    <div class="controls">
+      <button id="bgmToggle" class="toggle">🎵 BGMオン/オフ</button>
+      <button id="themeToggle" class="toggle">🎨 テーマ</button>
+      <button id="resetBtn" class="toggle" style="background:#ffefef;color:#8b2b2b">🔁 リセット</button>
+      <button id="prestigeBtn" class="prestige-btn" disabled>🌌 プレステージ</button>
+    </div>
+
+    <div class="small-note">左クリック / 右クリック / スペース でクリックできます。上限は 9,999京（到達後プレステージ可能）。</div>
+  </div>
+
+  <div class="right-col">
+    <div class="panel">
+      <h3>🛒 自動生産ショップ</h3>
+      <div class="shop-grid" id="autoShop"></div>
+    </div>
+
+    <div class="panel">
+      <h3>👆 クリック強化ショップ</h3>
+      <div class="shop-grid" id="clickShop"></div>
+    </div>
+
+    <div class="panel">
+      <h3>🏅 実績</h3>
+      <div class="ach-list" id="achList"><div class="ach-item">まだ解除なしです。がんばってください！</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- テーマメニュー -->
+<div class="theme-menu" id="themeMenu">
+  <div style="text-align:center;font-weight:900">テーマ & 通貨</div>
+  <div style="text-align:center;margin-top:8px">通貨の見た目</div>
+  <div class="theme-row" style="margin-top:6px">
+    <button class="theme-swatch" data-type="cookie" style="background:#d97a3b">🍪 Cookie</button>
+    <button class="theme-swatch" data-type="money" style="background:#f0b429">💰 Money</button>
+    <button class="theme-swatch" data-type="switch" style="background:#3b82f6">🎮 Switch</button>
+  </div>
+
+  <div style="text-align:center;margin-top:10px">カラー</div>
+  <div class="theme-row">
+    <button class="theme-swatch" data-theme="light" style="background:#d97a3b">ナチュラル</button>
+    <button class="theme-swatch" data-theme="dark" style="background:#222831">ダーク</button>
+    <button class="theme-swatch" data-theme="colorful" style="background:#ff6f61">カラフル</button>
+  </div>
+
+  <div style="text-align:center;margin-top:12px">
+    <button id="themeClose" class="btn small">閉じる</button>
+  </div>
+</div>
+
+<!-- プレステージ演出オーバーレイ -->
+<div class="prestige-overlay" id="prestigeOverlay">
+  <div class="prestige-center" id="prestigeCenter"></div>
+</div>
+
+<script>
+(() => {
+  // ---------- 設定 ----------
+  const CAP = 9.999e19; // 9,999京
+  const BGM_SRC = ''; // 任意のBGM URL
+  const CLICK_SFX = 'https://freesound.org/data/previews/569/569700_5121236-lq.mp3';
+  const BUY_SFX = 'https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg';
+  const PRESTIGE_MULT = 1.5;
+
+  // ---------- 状態ロード ----------
+  let count = parseFloat(localStorage.getItem('cc_count')||'0');
+  let items = JSON.parse(localStorage.getItem('cc_items')||'{}'); // keys: names -> owned count
+  let clickPower = parseFloat(localStorage.getItem('cc_clickPower')||'1');
+  let achievements = JSON.parse(localStorage.getItem('cc_ach')||'[]');
+  let clicksTotal = parseInt(localStorage.getItem('cc_clicksTotal')||'0',10);
+  let prestigeLevel = parseInt(localStorage.getItem('cc_prestige')||'0',10);
+  let themeChoice = localStorage.getItem('cc_theme') || 'cookie';
+  let colorTheme = localStorage.getItem('cc_colortheme') || 'light';
+
+  // ---------- 定義 ----------
+  const autoItems = {
+    cursor:      { title:'カーソル',      rate:0.1,       cost:15 },
+    grandma:     { title:'おばあちゃん',  rate:10,        cost:100 },
+    farm:        { title:'農場',          rate:100,       cost:1100 },
+    factory:     { title:'工場',          rate:1000,      cost:12000 },
+    bank:        { title:'銀行',          rate:5000,      cost:130000 },
+    temple:      { title:'神殿',          rate:25000,     cost:1400000 },
+    spaceship:   { title:'宇宙船',        rate:125000,    cost:20000000 },
+    lab:         { title:'研究所',        rate:600000,    cost:330000000 },
+    portal:      { title:'ポータル',      rate:1000000,   cost:5100000000 },
+    timemachine: { title:'タイムマシン',  rate:10000000,  cost:75000000000 }
+  };
+
+  let clickItems = [
+    { id:'g1', title:'強化クリック Lv1', power:2, cost:500, owned:0 },
+    { id:'g2', title:'強化クリック Lv2', power:8, cost:4000, owned:0 },
+    { id:'g3', title:'伝説の指',         power:50, cost:50000, owned:0 },
+    { id:'g4', title:'神の指',           power:200, cost:500000, owned:0 },
+    { id:'g5', title:'量子クリック',     power:1000, cost:10000000, owned:0 }
+  ];
+
+  const achievementDefs = [
+    // クリック系
+    { id:'a_click_1', title:'初クリック', req_clicks:1, reward:10, icon:'🌱' },
+    { id:'a_click_100', title:'連打職人', req_clicks:100, reward:100, icon:'👆' },
+    { id:'a_click_1000', title:'クリックマスター', req_clicks:1000, reward:500, icon:'🔥' },
+    { id:'a_click_10000', title:'狂気のクリック神', req_clicks:10000, reward:2000, icon:'💥' },
+    { id:'a_click_100000', title:'終わらない指', req_clicks:100000, reward:10000, icon:'🧠' },
+
+    // 所持系
+    { id:'a_have_1', title:'一枚焼き', req_have:1, reward:5, icon:'🥠' },
+    { id:'a_have_10000', title:'工場長', req_have:10000, reward:200, icon:'🏭' },
+    { id:'a_have_100000000', title:'億万長者', req_have:1e8, reward:2000, icon:'💰' },
+    { id:'a_have_1e12', title:'銀河のパン屋', req_have:1e12, reward:10000, icon:'🌌' },
+    { id:'a_have_1e16', title:'神の菓子職人', req_have:1e16, reward:50000, icon:'🍰' },
+
+    // 自動生産所持数
+    { id:'a_cursor_10', title:'カーソルコレクター', req_items:{cursor:10}, reward:50, icon:'🖱️' },
+    { id:'a_grandma_50', title:'おばあちゃん軍団', req_items:{grandma:50}, reward:500, icon:'👵' },
+    { id:'a_farm_100', title:'農業帝国', req_items:{farm:100}, reward:2000, icon:'🌾' },
+    { id:'a_factory_200', title:'メガファクトリー', req_items:{factory:200}, reward:5000, icon:'🏭' },
+    { id:'a_bank_300', title:'銀行王', req_items:{bank:300}, reward:10000, icon:'🏦' },
+
+    // 強化系
+    { id:'a_clickBoost_1', title:'ちょっと強くなった', req_clickBoost:1, reward:50, icon:'💪' },
+    { id:'a_clickBoost_10', title:'クリック超強化', req_clickBoost:10, reward:1000, icon:'⚡' },
+    { id:'a_clickBoost_all', title:'クリック強化マスター', req_clickBoostAll:true, reward:5000, icon:'🏆' },
+
+    // テーマ系
+    { id:'a_theme_change', title:'テーマチェンジャー', req_theme:1, reward:20, icon:'🎨' },
+    { id:'a_money_1000000', title:'お金の亡者', req_money_theme_total:1e6, reward:500, icon:'💰' },
+    { id:'a_switch_100000000', title:'ゲーマーの極み', req_switch_theme_total:1e8, reward:2000, icon:'🎮' },
+
+    // プレステージ系
+    { id:'a_prestige_1', title:'転生者', req_prestige:1, reward:500, icon:'🔁' },
+    { id:'a_prestige_5', title:'無限の菓子', req_prestige:5, reward:2000, icon:'♾️' },
+    { id:'a_prestige_10', title:'神域突破', req_prestige:10, reward:10000, icon:'🚀' },
+    { id:'a_prestige_20', title:'もう戻れない', req_prestige:20, reward:50000, icon:'🌟' },
+
+    // 隠し（仮）
+    { id:'a_secret_order', title:'？？？', secret:true, hint:'特定の順でテーマを切り替える', reward:10000, icon:'❓' },
+    { id:'a_reset10', title:'ありがとう', req_resets:10, reward:5000, icon:'🙏' }
+  ];
+
+  // ---------- DOM ----------
+  const cookieEl = document.getElementById('cookie');
+  const countEl = document.getElementById('count');
+  const countKanjiEl = document.getElementById('countKanji');
+  const cpsEl = document.getElementById('cps');
+  const autoShopEl = document.getElementById('autoShop');
+  const clickShopEl = document.getElementById('clickShop');
+  const achListEl = document.getElementById('achList');
+  const bgmToggle = document.getElementById('bgmToggle');
+  const themeToggle = document.getElementById('themeToggle');
+  const themeMenu = document.getElementById('themeMenu');
+  const themeClose = document.getElementById('themeClose');
+  const resetBtn = document.getElementById('resetBtn');
+  const prestigeBtn = document.getElementById('prestigeBtn');
+  const prestigeInfo = document.getElementById('prestigeInfo');
+  const prestigeOverlay = document.getElementById('prestigeOverlay');
+  const prestigeCenter = document.getElementById('prestigeCenter');
+
+  // ---------- Audio ----------
+  const clickSnd = new Audio(CLICK_SFX); clickSnd.volume = 0.6;
+  const buySnd = new Audio(BUY_SFX); buySnd.volume = 0.6;
+  const bgm = new Audio(); bgm.loop = true; bgm.volume = 0.28; if (BGM_SRC) bgm.src = BGM_SRC;
+
+  // ---------- ヘルパー ----------
+  function saveState(){
+    localStorage.setItem('cc_count', String(count));
+    localStorage.setItem('cc_items', JSON.stringify(items));
+    localStorage.setItem('cc_clickPower', String(clickPower));
+    localStorage.setItem('cc_ach', JSON.stringify(achievements));
+    localStorage.setItem('cc_clicksTotal', String(clicksTotal));
+    localStorage.setItem('cc_clickItems', JSON.stringify(clickItems.reduce((o,ci)=>{o[ci.id]=ci.owned;return o},{})));
+    localStorage.setItem('cc_prestige', String(prestigeLevel));
+    localStorage.setItem('cc_theme', themeChoice);
+    localStorage.setItem('cc_colortheme', colorTheme);
+  }
+
+  function formatNumber(num){
+    if (!isFinite(num)) return '0';
+    if (num >= 1e20) return (num/1e16).toFixed(2)+'京'; // fallback very large
+    if (num >= 1e12) return (num/1e12).toFixed(2)+'兆';
+    if (num >= 1e8) return (num/1e8).toFixed(2)+'億';
+    if (num >= 1e4) return (num/1e4).toFixed(2)+'万';
+    if (num >= 1000) return Math.floor(num).toLocaleString();
+    return Math.floor(num).toString();
+  }
+
+  function getBonusMultiplier(){
+    return Math.pow(PRESTIGE_MULT, prestigeLevel);
+  }
+
+  // ---------- 初期化: items & clickItems restore ----------
+  for (let k in autoItems) if (!items[k]) items[k] = 0;
+  const storedClickOwned = JSON.parse(localStorage.getItem('cc_clickItems')||'{}');
+  clickItems.forEach(ci=>{ if (storedClickOwned[ci.id]) { ci.owned = storedClickOwned[ci.id]; clickPower += ci.power * ci.owned; }});
+
+  // ---------- CPS ----------
+  function totalCPS(){
+    let total = 0;
+    for (let k in items){
+      if (autoItems[k]) total += (autoItems[k].rate * (items[k]||0));
+    }
+    return total * getBonusMultiplier();
+  }
+
+  // ---------- UI 更新 ----------
+  function updateDisplays(){
+    countEl.textContent = Math.floor(count).toLocaleString();
+    countKanjiEl.textContent = formatNumber(count);
+    cpsEl.textContent = 'CPS: ' + formatNumber(totalCPS());
+    prestigeInfo.textContent = `Prestige Lv.${prestigeLevel}  倍率: x${getBonusMultiplier().toFixed(2)}`;
+    saveState();
+    updateAffordabilityUI();
+    updatePrestigeButton();
+    refreshAchievements();
+    updateTitleByTheme();
+  }
+
+  // ---------- まとめ買いボタン生成（1/10/100/1000 + 全額） ----------
+  function createBuyButtons(costFunc, buyCallback, maxCallback){
+    const steps = [1,10,100,1000];
+    const wrapper = document.createElement('div'); wrapper.className = 'buy-row';
+    steps.forEach(n=>{
+      const b = document.createElement('button'); b.className = 'btn small'; b.textContent = n + '個';
+      b.addEventListener('click', ()=> buyCallback(n));
+      wrapper.appendChild(b);
+    });
+    const all = document.createElement('button'); all.className = 'btn small'; all.textContent = '💥 一括購入';
+    all.addEventListener('click', ()=> maxCallback());
+    wrapper.appendChild(all);
+    return wrapper;
+  }
+
+  // ---------- ショップ更新 ----------
+  function updateShops(){
+    // Auto shop
+    autoShopEl.innerHTML = '';
+    Object.keys(autoItems).forEach((k)=>{
+      const it = autoItems[k];
+      const owned = items[k]||0;
+      const card = document.createElement('div'); card.className = 'shop-item';
+      card.innerHTML = `<div class="item-title">${it.title}</div><div class="item-meta">${formatNumber(it.cost)} 🍪 / ${formatNumber(it.rate)}/秒 ・ 所有: ${owned}</div>`;
+      const buyBtns = createBuyButtons(()=>it.cost, (n)=>{
+        const totalCost = it.cost * n;
+        if (count >= totalCost){ count -= totalCost; items[k] = (items[k]||0) + n; buySnd.currentTime=0; buySnd.play().catch(()=>{}); updateDisplays(); updateShops(); }
+        else alert('クッキーが足りません！');
+      }, ()=>{
+        const canBuy = Math.floor(count / it.cost);
+        if (canBuy > 0){ count -= it.cost * canBuy; items[k] = (items[k]||0) + canBuy; buySnd.currentTime=0; buySnd.play().catch(()=>{}); updateDisplays(); updateShops(); }
+        else alert('クッキーが足りません！');
+      });
+      card.appendChild(buyBtns);
+      autoShopEl.appendChild(card);
+    });
+
+    // Click shop
+    clickShopEl.innerHTML = '';
+    clickItems.forEach(ci=>{
+      const owned = ci.owned||0;
+      const card = document.createElement('div'); card.className = 'shop-item';
+      card.innerHTML = `<div class="item-title">${ci.title}</div><div class="item-meta">+${ci.power} / ${formatNumber(ci.cost)} 🍪 ・ 所有: ${owned}</div>`;
+      const buyBtns = createBuyButtons(()=>ci.cost, (n)=>{
+        const totalCost = ci.cost * n;
+        if (count >= totalCost){ count -= totalCost; ci.owned = (ci.owned||0) + n; clickPower += ci.power * n * getBonusMultiplier(); buySnd.currentTime=0; buySnd.play().catch(()=>{}); saveState(); updateDisplays(); updateShops(); }
+        else alert('クッキーが足りません！');
+      }, ()=>{
+        const canBuy = Math.floor(count / ci.cost);
+        if (canBuy > 0){ count -= ci.cost * canBuy; ci.owned = (ci.owned||0) + canBuy; clickPower += ci.power * canBuy * getBonusMultiplier(); buySnd.currentTime=0; buySnd.play().catch(()=>{}); saveState(); updateDisplays(); updateShops(); }
+        else alert('クッキーが足りません！');
+      });
+      card.appendChild(buyBtns);
+      clickShopEl.appendChild(card);
+    });
+
+    updateAffordabilityUI();
+  }
+
+  // ---------- 買えるかUI制御 ----------
+  function updateAffordabilityUI(){
+    // auto
+    document.querySelectorAll('#autoShop .shop-item').forEach((card, idx)=>{
+      const key = Object.keys(autoItems)[idx];
+      const it = autoItems[key];
+      const buttons = card.querySelectorAll('button.btn.small');
+      buttons.forEach((btn, bi)=>{
+        const n = [1,10,100,1000][bi];
+        btn.disabled = (count < it.cost * n);
+      });
+      const allBtn = card.querySelector('button.btn.small:last-child');
+      if (allBtn) allBtn.disabled = (count < it.cost);
+    });
+    // click
+    document.querySelectorAll('#clickShop .shop-item').forEach((card, idx)=>{
+      const ci = clickItems[idx];
+      const buttons = card.querySelectorAll('button.btn.small');
+      buttons.forEach((btn, bi)=>{
+        const n = [1,10,100,1000][bi];
+        btn.disabled = (count < ci.cost * n);
+      });
+      const allBtn = card.querySelector('button.btn.small:last-child');
+      if (allBtn) allBtn.disabled = (count < ci.cost);
+    });
+  }
+
+  // ---------- 実績処理 ----------
+  function refreshAchievements(){
+    achListEl.innerHTML = '';
+    if (!achievements || achievements.length===0){
+      const e = document.createElement('div'); e.className='ach-item'; e.textContent='まだ解除なしです。がんばってください！';
+      achListEl.appendChild(e); return;
+    }
+    achievements.forEach(id=>{
+      const def = achievementDefs.find(d=>d.id===id);
+      if (!def) return;
+      const el = document.createElement('div'); el.className='ach-item'; el.textContent = `${def.icon||''} ${def.title}`;
+      achListEl.appendChild(el);
+    });
+  }
+
+  function checkAchievements(){
+    const newly = [];
+    achievementDefs.forEach(def=>{
+      if (achievements.includes(def.id)) return;
+      // clicks
+      if (def.req_clicks && clicksTotal >= def.req_clicks) newly.push(def.id);
+      // have total
+      if (def.req_have && count >= def.req_have) newly.push(def.id);
+      // items owned
+      if (def.req_items){
+        let ok = true;
+        for (let k in def.req_items) if ((items[k]||0) < def.req_items[k]) ok=false;
+        if (ok) newly.push(def.id);
+      }
+      // click boosts count
+      if (def.req_clickBoost){
+        const totalBoosts = clickItems.reduce((s,ci)=>s+(ci.owned||0),0);
+        if (totalBoosts >= def.req_clickBoost) newly.push(def.id);
+      }
+      if (def.req_clickBoostAll){
+        const allBought = clickItems.every(ci=>ci.owned && ci.owned>0);
+        if (allBought) newly.push(def.id);
+      }
+      if (def.req_theme && localStorage.getItem('cc_theme') && parseInt(localStorage.getItem('cc_theme_changes')||'0') >= def.req_theme) newly.push(def.id);
+      if (def.req_money_theme_total && (localStorage.getItem('cc_money_total')||0) >= def.req_money_theme_total) newly.push(def.id);
+      if (def.req_switch_theme_total && (localStorage.getItem('cc_switch_total')||0) >= def.req_switch_theme_total) newly.push(def.id);
+      if (def.req_prestige && prestigeLevel >= def.req_prestige) newly.push(def.id);
+      if (def.req_resets && parseInt(localStorage.getItem('cc_resets')||'0') >= def.req_resets) newly.push(def.id);
+      // secret/hint omitted: can implement special check later
+    });
+    if (newly.length){
+      newly.forEach(id=>{
+        achievements.push(id);
+        const def = achievementDefs.find(d=>d.id===id);
+        if (def && def.reward) { count += def.reward; popupAchievement(def); }
+      });
+      saveState(); refreshAchievements();
+    }
+  }
+
+  function popupAchievement(def){
+    const t = document.createElement('div'); t.className='ach-item';
+    t.style.position='fixed'; t.style.left='50%'; t.style.top='18px'; t.style.transform='translateX(-50%)'; t.style.zIndex=4500;
+    t.style.background = '#fff'; t.style.padding = '10px 14px'; t.style.borderRadius='10px'; t.style.boxShadow='0 8px 24px rgba(0,0,0,0.12)';
+    t.textContent = `${def.icon||''} ${def.title} +${formatNumber(def.reward)}🍪`;
+    document.body.appendChild(t);
+    setTimeout(()=>t.remove(),2400);
+  }
+
+  // ---------- クリック処理（左/右/スペース） ----------
+  function doClick(){
+    const gained = clickPower * getBonusMultiplier();
+    count += gained;
+    clicksTotal++;
+    clickSnd.currentTime = 0; clickSnd.play().catch(()=>{});
+    cookieEl.classList.remove('bounce'); void cookieEl.offsetWidth; cookieEl.classList.add('bounce');
+    updateDisplays();
+    checkAchievements();
+  }
+  cookieEl.addEventListener('click', (e)=>{ doClick(); });
+  cookieEl.addEventListener('contextmenu', (e)=>{ e.preventDefault(); doClick(); });
+  document.addEventListener('keydown', (e)=>{ if (e.code === 'Space'){ e.preventDefault(); doClick(); }});
+
+  // ---------- 自動生産（毎秒） ----------
+  setInterval(()=>{
+    const cps = totalCPS();
+    if (cps > 0) count += cps;
+    if (count > CAP) count = CAP; // cap at max
+    updateDisplays();
+    checkAchievements();
+  }, 1000);
+
+  // ---------- リセット ----------
+  resetBtn.addEventListener('click', ()=>{
+    if (!confirm('本当にリセットしますか？ 全ての購入/所持が失われます。')) return;
+    // clear except prestige & theme & totals maybe
+    count = 0; clickPower = 1; clicksTotal = 0; achievements = [];
+    for (let k in autoItems) items[k] = 0;
+    clickItems.forEach(ci=>ci.owned = 0);
+    localStorage.removeItem('cc_count'); localStorage.removeItem('cc_items'); localStorage.removeItem('cc_clickPower');
+    saveState();
+    updateShops(); updateDisplays();
+  });
+
+  // ---------- プレステージボタン & 処理 ----------
+  function updatePrestigeButton(){
+    if (count >= CAP){
+      prestigeBtn.disabled = false;
+      prestigeBtn.classList.add('active');
+    } else {
+      prestigeBtn.disabled = true;
+      prestigeBtn.classList.remove('active');
+    }
+  }
+
+  prestigeBtn.addEventListener('click', ()=>{
+    if (count < CAP) return;
+    if (!confirm(`プレステージを発動しますか？\n所持データはリセットされますが、生産効率が x${PRESTIGE_MULT } 増加します。`)) return;
+    playPrestigeAnimation(()=>{
+      // apply prestige
+      prestigeLevel++;
+      // record resets count (for achievements)
+      const prevResets = parseInt(localStorage.getItem('cc_resets')||'0',10);
+      localStorage.setItem('cc_resets', String(prevResets+1));
+      // clear everything except prestige and totals we keep
+      count = 0;
+      for (let k in autoItems) items[k] = 0;
+      // click power reset to 1 then reapply owned clickItems with bonus multiplier
+      clickPower = 1;
+      clickItems.forEach(ci=>{
+        ci.owned = 0; // we decided full reset of upgrades per spec
+      });
+      // increment multiplier is derived from prestigeLevel via getBonusMultiplier
+      // save and update
+      saveState();
+      updateShops();
+      updateDisplays();
+      popupPrestigeInfo();
+    });
+  });
+
+  function popupPrestigeInfo(){
+    const t = document.createElement('div'); t.className='ach-item';
+    t.style.position='fixed'; t.style.left='50%'; t.style.top='18px'; t.style.transform='translateX(-50%)'; t.style.zIndex=4500;
+    t.style.background = '#fff'; t.style.padding = '12px 16px'; t.style.borderRadius = '12px'; t.style.boxShadow='0 8px 34px rgba(0,0,0,0.18)';
+    t.textContent = `Prestige Lv.${prestigeLevel} — 生産効率 x${getBonusMultiplier().toFixed(2)} に上昇しました！`;
+    document.body.appendChild(t);
+    setTimeout(()=>t.remove(),3600);
+    // award prestige achievements
+    checkAchievements();
+  }
+
+  // ---------- プレステージ演出（リッチ） ----------
+  function playPrestigeAnimation(callback){
+    prestigeOverlay.style.display = 'flex';
+    prestigeOverlay.style.pointerEvents = 'auto';
+    prestigeCenter.innerHTML = '';
+    // white/gold fade background
+    const bg = document.createElement('div'); bg.style.position='absolute'; bg.style.inset='0'; bg.style.background='linear-gradient(180deg,rgba(255,255,255,0.9),rgba(255,245,230,0.6))'; bg.style.opacity='0'; bg.style.transition='opacity 0.6s ease';
+    prestigeCenter.appendChild(bg);
+    requestAnimationFrame(()=> bg.style.opacity = 1 );
+    // create many gold particles
+    const PARTICLES = 80;
+    const parts = [];
+    for (let i=0;i<PARTICLES;i++){
+      const p = document.createElement('div'); p.className='particle';
+      const left = 50 + (Math.random()-0.5)*60; // percent
+      p.style.left = left + '%';
+      p.style.top = (50 + (Math.random()-0.5)*8) + '%';
+      p.style.transform = `scale(${0.6+Math.random()*1.2})`;
+      prestigeCenter.appendChild(p);
+      parts.push(p);
+      // animate
+      const dx = (Math.random()-0.5)*200;
+      const dy = - (200 + Math.random()*400);
+      const rot = (Math.random()-0.5)*720;
+      p.style.transition = `transform 1.2s cubic-bezier(.2,.7,.2,1), opacity 1.2s linear`;
+      requestAnimationFrame(()=> {
+        p.style.transform = `translate(${dx}px, ${dy}px) rotate(${rot}deg) scale(${0.6+Math.random()*1.2})`;
+        p.style.opacity = 0;
+      });
+    }
+    // show text
+    const text = document.createElement('div'); text.className='prestige-text';
+    text.style.position='relative'; text.style.zIndex='10'; text.style.opacity='0'; text.style.transition='opacity 0.6s ease 0.2s';
+    text.innerHTML = `Prestige Lv.${prestigeLevel+1}<br><span style="font-size:16px;font-weight:700">黄金の焼き直し、再スタート！</span>`;
+    prestigeCenter.appendChild(text);
+    requestAnimationFrame(()=> text.style.opacity = 1);
+
+    // fade out after 1.8s
+    setTimeout(()=>{
+      prestigeOverlay.style.transition = 'opacity 0.8s ease';
+      prestigeOverlay.style.opacity = 0;
+      setTimeout(()=>{
+        prestigeOverlay.style.display = 'none';
+        prestigeOverlay.style.opacity = 1;
+        prestigeCenter.innerHTML = '';
+        prestigeOverlay.style.pointerEvents = 'none';
+        callback && callback();
+      },800);
+    },1800);
+  }
+
+  // ---------- テーマ処理 ----------
+  function updateTitleByTheme(){
+    let themeName = 'Cookie';
+    if (themeChoice === 'money') themeName = 'Money';
+    else if (themeChoice === 'switch') themeName = 'Switch';
+    document.title = `${themeName} Clicker`;
+    document.getElementById('gameTitle').textContent = `${themeName} Clicker`;
+    // cookie icon change
+    if (themeChoice === 'money') cookieEl.textContent = '💰';
+    else if (themeChoice === 'switch') cookieEl.textContent = '🎮';
+    else cookieEl.textContent = '🍪';
+    // color palette
+    if (colorTheme === 'light'){
+      document.documentElement.style.setProperty('--bg','#f4efe9');
+      document.documentElement.style.setProperty('--card','#ffffff');
+      document.documentElement.style.setProperty('--accent','#d97a3b');
+      document.documentElement.style.setProperty('--muted','#8b6a56');
+    } else if (colorTheme === 'dark'){
+      document.documentElement.style.setProperty('--bg','#121217');
+      document.documentElement.style.setProperty('--card','#1e1f24');
+      document.documentElement.style.setProperty('--accent','#ff6f61');
+      document.documentElement.style.setProperty('--muted','#d0d0d0');
+    } else if (colorTheme === 'colorful'){
+      document.documentElement.style.setProperty('--bg','#fff8f1');
+      document.documentElement.style.setProperty('--card','#fff1f0');
+      document.documentElement.style.setProperty('--accent','#ff7a59');
+      document.documentElement.style.setProperty('--muted','#3b2b21');
+    }
+  }
+
+  themeToggle.addEventListener('click', ()=> themeMenu.style.display = 'block');
+  themeClose.addEventListener('click', ()=> themeMenu.style.display = 'none');
+  document.querySelectorAll('.theme-swatch').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const t = btn.dataset.type;
+      const th = btn.dataset.theme;
+      if (t){ themeChoice = t; localStorage.setItem('cc_theme', themeChoice); }
+      if (th){ colorTheme = th; localStorage.setItem('cc_colortheme', colorTheme); }
+      updateDisplays();
+      themeMenu.style.display = 'none';
+    });
+  });
+
+  // ---------- 初回準備 ----------
+  function initialLoad(){
+    updateShops();
+    updateDisplays();
+    refreshAchievements();
+  }
+
+  // ---------- ショップ・表示初期化 ----------
+  function updateShops(){ updateShopsCalled(); } // placeholder; real defined below
+
+  // define updateShopsCalled to avoid hoisting confusion
+  function updateShopsCalled(){
+    // rebuild shops: already implemented above as updateShops() earlier, but here we reuse
+    autoShopEl.innerHTML = '';
+    Object.keys(autoItems).forEach((k)=>{
+      const it = autoItems[k];
+      const owned = items[k] || 0;
+      const card = document.createElement('div'); card.className = 'shop-item';
+      card.innerHTML = `<div class="item-title">${it.title}</div><div class="item-meta">${formatNumber(it.cost)} 🍪 / ${formatNumber(it.rate)}/秒 ・ 所有: ${owned}</div>`;
+      const buyBtns = createBuyButtons(()=>it.cost, (n)=>{
+        const totalCost = it.cost * n;
+        if (count >= totalCost){ count -= totalCost; items[k] = (items[k]||0) + n; buySnd.currentTime=0; buySnd.play().catch(()=>{}); updateDisplays(); updateShopsCalled(); }
+        else alert('クッキーが足りません！');
+      }, ()=>{
+        const canBuy = Math.floor(count / it.cost);
+        if (canBuy > 0){ count -= it.cost * canBuy; items[k] = (items[k]||0) + canBuy; buySnd.currentTime=0; buySnd.play().catch(()=>{}); updateDisplays(); updateShopsCalled(); }
+        else alert('クッキーが足りません！');
+      });
+      card.appendChild(buyBtns);
+      autoShopEl.appendChild(card);
+    });
+
+    clickShopEl.innerHTML = '';
+    clickItems.forEach(ci=>{
+      const owned = ci.owned || 0;
+      const card = document.createElement('div'); card.className = 'shop-item';
+      card.innerHTML = `<div class="item-title">${ci.title}</div><div class="item-meta">+${ci.power} / ${formatNumber(ci.cost)} 🍪 ・ 所有: ${owned}</div>`;
+      const buyBtns = createBuyButtons(()=>ci.cost, (n)=>{
+        const totalCost = ci.cost * n;
+        if (count >= totalCost){
+          count -= totalCost;
+          ci.owned = (ci.owned||0) + n;
+          clickPower += ci.power * n * getBonusMultiplier();
+          buySnd.currentTime=0; buySnd.play().catch(()=>{});
+          saveState(); updateDisplays(); updateShopsCalled();
+        } else alert('クッキーが足りません！');
+      }, ()=>{
+        const canBuy = Math.floor(count / ci.cost);
+        if (canBuy > 0){
+          count -= ci.cost * canBuy;
+          ci.owned = (ci.owned||0) + canBuy;
+          clickPower += ci.power * canBuy * getBonusMultiplier();
+          buySnd.currentTime=0; buySnd.play().catch(()=>{});
+          saveState(); updateDisplays(); updateShopsCalled();
+        } else alert('クッキーが足りません！');
+      });
+      card.appendChild(buyBtns);
+      clickShopEl.appendChild(card);
+    });
+
+    updateAffordabilityUI();
+  }
+
+  // ---------- 買えるボタン明るさ制御 ----------
+  function updateAffordabilityUI(){
+    document.querySelectorAll('#autoShop .shop-item').forEach((card, idx)=>{
+      const key = Object.keys(autoItems)[idx];
+      const it = autoItems[key];
+      const buttons = card.querySelectorAll('button.btn.small');
+      buttons.forEach((btn, bi)=>{
+        const n = [1,10,100,1000][bi];
+        btn.disabled = (count < it.cost * n);
+      });
+      const allBtn = card.querySelector('button.btn.small:last-child');
+      if (allBtn) allBtn.disabled = (count < it.cost);
+    });
+    document.querySelectorAll('#clickShop .shop-item').forEach((card, idx)=>{
+      const ci = clickItems[idx];
+      const buttons = card.querySelectorAll('button.btn.small');
+      buttons.forEach((btn, bi)=>{
+        const n = [1,10,100,1000][bi];
+        btn.disabled = (count < ci.cost * n);
+      });
+      const allBtn = card.querySelector('button.btn.small:last-child');
+      if (allBtn) allBtn.disabled = (count < ci.cost);
+    });
+  }
+
+  // ---------- 実行開始 ----------
+  initialLoad();
+
+  // expose updateShopsCalled to other code
+  window.updateShops = updateShopsCalled;
+
+  // ---------- 最終UI更新ループ ----------
+  setInterval(()=>{ updateDisplays(); }, 1000);
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<title>株運営ゲーム - 保存対応版</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body{font-family:"Segoe UI",sans-serif;background:linear-gradient(to right,#e0f7fa,#80deea);margin:0;padding:20px;display:flex;justify-content:center;}
+.container{display:flex;width:1150px;}
+#game{background:#fff;border-radius:15px;padding:20px;box-shadow:0 10px 25px rgba(0,0,0,0.2);margin-right:20px;flex:1;}
+.stats{display:flex;justify-content:space-between;margin-bottom:15px;}
+.stat-card{background:#f1f8e9;padding:10px 15px;border-radius:10px;text-align:center;flex:1;margin-right:10px;box-shadow:0 4px 10px rgba(0,0,0,0.1);}
+.stat-card:last-child{margin-right:0;}
+.tabs{display:grid;grid-template-columns:repeat(10,1fr);margin-bottom:15px;}
+.tabs button{padding:8px;border:none;border-radius:8px 8px 0 0;background:#b2ebf2;cursor:pointer;font-weight:bold;transition:all 0.15s;border-bottom:2px solid transparent;box-shadow:0 2px 4px rgba(0,0,0,0.1);}
+.tabs button.active{background:#00acc1;color:#fff;border-bottom:2px solid #fff;box-shadow:none;}
+.tabs button:hover:not(.active){background:#80deea;}
+.chart-card{background:#fff3e0;padding:15px;border-radius:10px;box-shadow:0 4px 15px rgba(0,0,0,0.15);margin-bottom:15px;}
+#message{margin-top:10px;display:inline-block;transition:all 0.3s;min-height:28px;}
+button.buy,button.sell,button.reset{padding:10px 15px;margin-right:10px;border:none;border-radius:8px;cursor:pointer;font-weight:bold;transition:all 0.15s;}
+button.buy{background:#a5d6a7;}button.buy:hover{background:#81c784;}
+button.sell{background:#ef9a9a;}button.sell:hover{background:#e57373;}
+button.reset{background:#90a4ae;}button.reset:hover{background:#78909c;}
+input#tradeCount{width:60px;padding:6px;margin-right:10px;text-align:center;border-radius:6px;border:1px solid #cfd8dc;}
+#history{width:300px;background:#fff;border-radius:15px;padding:12px;box-shadow:0 10px 25px rgba(0,0,0,0.2);height:680px;overflow-y:auto;}
+#history h3{text-align:center;margin-top:0;}
+.event-btn{display:block;width:100%;text-align:left;padding:8px;margin-bottom:6px;border:none;border-radius:6px;cursor:pointer;color:#fff;font-weight:bold;}
+.note{font-size:12px;color:#666;margin-top:6px;}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div id="game">
+    <h1>株運営ゲーム（保存対応版）</h1>
+
+    <div class="stats">
+      <div class="stat-card">所持金<br>¥<span id="money">1</span></div>
+      <div class="stat-card">現在株価<br>¥<span id="stockPrice">100</span></div>
+      <div class="stat-card">保有株（現在選択）<br><span id="stocks">0</span> 株</div>
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <input type="number" id="tradeCount" value="1" min="1" />
+      <button class="buy" onclick="buyStock()">株を買う</button>
+      <button class="sell" onclick="sellStock()">株を売る</button>
+      <button class="reset" onclick="resetGame()">リセット</button>
+      <div class="note">ショートカット：A社=A、B社=S、C社=D、D社=F、E社=G、F社=H、G社=J、H社=K、I社=L、J社=;キー</div>
+    </div>
+
+    <p id="message"></p>
+
+    <div class="tabs" id="tabs"></div>
+
+    <div class="chart-card">
+      <canvas id="stockChart" width="500" height="300"></canvas>
+    </div>
+  </div>
+
+  <div id="history">
+    <h3>イベント履歴</h3>
+    <div id="eventList"></div>
+  </div>
+</div>
+
+<audio id="soundUp" src="https://www.myinstants.com/media/sounds/positive-win-sound.mp3"></audio>
+<audio id="soundDown" src="https://www.myinstants.com/media/sounds/negative-fail.mp3"></audio>
+
+<script>
+const companies=['A','B','C','D','E','F','G','H','I','J'];
+const colors=['#1e88e5','#43a047','#e53935','#fb8c00','#8e24aa','#6d4c41','#00897b','#3949ab','#d81b60','#00bcd4'];
+const MAX_HISTORY=60;
+const MAX_EVENT_HISTORY=200;
+
+let currentStock='A',seconds=0,money=1;
+let stocks={},stockPrices={},stockHistory={},timeLabels={},eventHistory=[],messageTimeout=null;
+
+function initializeDefaults(){
+  companies.forEach((c)=>{
+    stocks[c]=0;
+    stockPrices[c]=100;
+    stockHistory[c]=[stockPrices[c]];
+    timeLabels[c]=[0];
+  });
+  money=1; // 初期所持金 1円
+  eventHistory=[];
+}
+
+function loadData(){
+  initializeDefaults();
+  let saved=localStorage.getItem('stockGameData');
+  if(saved){
+    try{
+      const d=JSON.parse(saved);
+      if(typeof d.money==='number') money=d.money;
+      if(d.stocks){companies.forEach(c=>{if(d.stocks[c]!==undefined) stocks[c]=d.stocks[c];});}
+      console.log('データを復元しました');
+    }catch(e){console.warn('データ読み込み失敗',e);}
+  }
+}
+
+function saveData(){
+  const data={money,stocks};
+  localStorage.setItem('stockGameData',JSON.stringify(data));
+}
+
+const ctx=document.getElementById('stockChart').getContext('2d');
+let stockChart=null;
+
+function initChart(){
+  stockChart=new Chart(ctx,{
+    type:'line',
+    data:{labels:timeLabels[currentStock],datasets:[{label:currentStock+'株価',data:stockHistory[currentStock],borderColor:colors[companies.indexOf(currentStock)],backgroundColor:'rgba(0,0,0,0.03)',tension:0.25,borderWidth:2,pointRadius:4,pointHoverRadius:6}]},
+    options:{responsive:false,animation:{duration:200},scales:{x:{title:{display:true,text:'経過秒'}},y:{title:{display:true,text:'株価（円）'}}},plugins:{legend:{display:false}}}
+  });
+}
+
+function createTabs(){
+  const tabs=document.getElementById('tabs');tabs.innerHTML='';
+  companies.forEach(c=>{
+    const btn=document.createElement('button');btn.id='tab'+c;btn.textContent=c+'社';
+    btn.onclick=()=>showTab(c);tabs.appendChild(btn);
+  });
+}
+
+function updateDisplay(){
+  document.getElementById('money').textContent=money;
+  document.getElementById('stockPrice').textContent=stockPrices[currentStock];
+  document.getElementById('stocks').textContent=stocks[currentStock];
+  stockChart.data.labels=timeLabels[currentStock].slice();
+  stockChart.data.datasets[0].data=stockHistory[currentStock].slice();
+  stockChart.data.datasets[0].label=currentStock+'株価';
+  stockChart.data.datasets[0].borderColor=colors[companies.indexOf(currentStock)]||'#1e88e5';
+  stockChart.update();
+  companies.forEach(c=>{const el=document.getElementById('tab'+c);if(el)el.classList.toggle('active',currentStock===c);});
+  updateEventList();
+  saveData();
+}
+
+function fluctuateStockPrice(){
+  seconds++;
+  companies.forEach(stock=>{
+    let change=Math.floor(Math.random()*21)-10;
+    if(Math.random()<0.1){
+      if(Math.random()<0.5){
+        const bonus=Math.floor(Math.random()*51)+50; change+=bonus; showEvent(stock+'社が急上昇！ +'+bonus+'円','#4caf50',stock);
+      }else{
+        const drop=Math.floor(Math.random()*51)+50; change-=drop; showEvent(stock+'社が急下降！ -'+drop+'円','#f44336',stock);
+      }
+    }
+    stockPrices[stock]+=change;if(stockPrices[stock]<1) stockPrices[stock]=1;
+    stockHistory[stock].push(stockPrices[stock]);timeLabels[stock].push(seconds);
+    if(stockHistory[stock].length>MAX_HISTORY){stockHistory[stock].shift();timeLabels[stock].shift();}
+  });
+  updateDisplay();
+}
+
+function showEvent(msg,color,stock){
+  const el=document.getElementById('message');el.innerHTML='';
+  if(messageTimeout) clearTimeout(messageTimeout);
+  const btn=document.createElement('button');btn.textContent=msg;btn.style.backgroundColor=color;
+  btn.style.color='#fff';btn.style.border='none';btn.style.borderRadius='6px';
+  btn.style.padding='6px 10px';btn.style.cursor='pointer';
+  btn.onclick=()=>showTab(stock);
+  el.appendChild(btn);
+  messageTimeout=setTimeout(()=>{el.innerHTML='';},5000);
+  eventHistory.unshift({msg,color,stock});
+  if(eventHistory.length>MAX_EVENT_HISTORY) eventHistory.pop();
+}
+
+function updateEventList(){
+  const list=document.getElementById('eventList');list.innerHTML='';
+  eventHistory.forEach(ev=>{
+    const btn=document.createElement('button');btn.textContent=ev.msg;
+    btn.className='event-btn';
+    btn.style.backgroundColor=ev.color;
+    btn.onclick=()=>showTab(ev.stock);
+    list.appendChild(btn);
+  });
+}
+
+function buyStock(){const count=parseInt(document.getElementById('tradeCount').value)||1;const total=stockPrices[currentStock]*count;if(money>=total){money-=total;stocks[currentStock]+=count;}updateDisplay();}
+function sellStock(){const count=parseInt(document.getElementById('tradeCount').value)||1;if(stocks[currentStock]>=count){money+=stockPrices[currentStock]*count;stocks[currentStock]-=count;}updateDisplay();}
+function showTab(s){currentStock=s;updateDisplay();}
+function resetGame(){if(!confirm('ゲームをリセットしますか？')) return;initializeDefaults();eventHistory=[];updateDisplay();localStorage.removeItem('stockGameData');}
+
+document.addEventListener('keydown',e=>{
+  const map={'a':'A','s':'B','d':'C','f':'D','g':'E','h':'F','j':'G','k':'H','l':'I',';':'J'};
+  const key=e.key.toLowerCase();if(map[key]) showTab(map[key]);
+});
+
+loadData();createTabs();initChart();updateDisplay();setInterval(fluctuateStockPrice,1000);
+</script>
+</body>
+</html>
